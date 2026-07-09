@@ -31,8 +31,8 @@ def main():
     parser = argparse.ArgumentParser(description="OCR images into a single text file.")
     # Example usage, given folder of imgs `./scans`:
     #   python image_to_text.py ./scans -o output.txt
-    parser.add_argument("inputs", nargs="+",
-                        help="Input multiple image files or a folder of images")
+    parser.add_argument("inputs", nargs="*", default=[Path(".\\imgs")],
+                        help="Input multiple image files or a folder of images, defaults to \".\\imgs\"")
     parser.add_argument("-o", "--output", default="output.txt",
                         help="Output the text file path, defaults to \"output.txt\"")
     parser.add_argument("--lang", default="eng",
