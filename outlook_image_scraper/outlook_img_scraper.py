@@ -1,10 +1,19 @@
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
 import win32com.client
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
+
+
+def file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 def get_root_folder(namespace, account: str | None):
     # Return the starting folder object for a given account
@@ -61,11 +70,13 @@ def main():
     parser.add_argument("-o", "--output", default="./downloaded_images",
                         help="Folder to save images into (default: ./downloaded_images)")
     parser.add_argument("--folder", default=None,
-                        help="Outlook folder to search, e.g. 'Inbox' or 'Inbox/Archive' (default: Inbox)")
+                        help="Outlook folder to search, e.g. 'Inbox' or 'Archive' (default: Inbox)")
     parser.add_argument("--exact", action="store_true",
                         help="Require exact subject match instead of substring match")
     parser.add_argument("--min-size", type=int, default=0,
                         help="Skip image attachments smaller than this many bytes (e.g. to skip tiny signature logos)")
+    parser.add_argument("--keep-duplicates", action="store_true",
+                        help="Keep duplicate images (default: skip images with identical content)")
     parser.add_argument("--list-accounts", action="store_true",
                          help="List all connected accounts and their top-level folders, then exit")
     parser.add_argument("--account", default=None,
@@ -111,7 +122,9 @@ def main():
     matched_count = 0
     saved_count = 0
     skipped_small = 0
- 
+    skipped_dupes = 0
+    seen_hashes: set[str] = set()
+
     for item in items:
         # We only want emails, MailItem class = 43
         # https://learn.microsoft.com/en-us/office/vba/api/outlook.olobjectclass
@@ -121,37 +134,49 @@ def main():
             subject = item.Subject or ""
         except Exception:
             continue
- 
+
         is_match = (subject == target) if args.exact else (target in subject.lower())
         if not is_match:
             continue
- 
+
         matched_count += 1
         print(f"  Match: \"{subject}\" ({item.ReceivedTime})")
- 
+
         for attachment in item.Attachments:
             fname = attachment.FileName
             ext = Path(fname).suffix.lower()
             if ext not in IMAGE_EXTENSIONS:
                 continue
- 
+
             if args.min_size and attachment.Size < args.min_size:
                 skipped_small += 1
                 continue
- 
+
             safe_subject = sanitize_filename(subject)[:60]
             safe_fname = sanitize_filename(fname)
             # Prefix with a counter to avoid collisions when multiple emails
             # or attachments share the same filename.
             save_path = out_dir / f"{saved_count+1:03d}_{safe_subject}_{safe_fname}"
- 
+
             attachment.SaveAsFile(str(save_path.resolve()))
+
+            if not args.keep_duplicates:
+                digest = file_hash(save_path)
+                if digest in seen_hashes:
+                    save_path.unlink(missing_ok=True)
+                    skipped_dupes += 1
+                    print(f"    Skipped duplicate: {fname}")
+                    continue
+                seen_hashes.add(digest)
+
             print(f"    Saved: {save_path.name}")
             saved_count += 1
- 
+
     print(f"\nDone. {matched_count} matching email(s) found, {saved_count} image(s) saved to {out_dir.resolve()}")
     if skipped_small:
         print(f"({skipped_small} image(s) skipped for being under --min-size)")
+    if skipped_dupes:
+        print(f"({skipped_dupes} duplicate image(s) skipped)")
 
 if __name__ == "__main__":
     main()
