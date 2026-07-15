@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 import pytesseract
 from PIL import Image
+from tqdm import tqdm
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
@@ -48,19 +49,18 @@ def main():
 
     print(f"Found {len(images)} image(s).")
     results = []
-    for i, path in enumerate(images, 1):
-        print(f"  [{i}/{len(images)}] {path.name}")
+    for path in tqdm(images, desc="OCR", unit="img"):
         try:
             text = ocr_image(path, lang=args.lang)
         except Exception as e:
             text = f"[ERROR reading {path.name}: {e}]"
-            print(f"    -> {text}")
- 
+            tqdm.write(f"  -> {text}")
+
         if args.no_page_markers:
             results.append(text)
         else:
             results.append(f"--- {path.name} ---\n{text}")
- 
+
     out_path = Path(args.output)
     out_path.write_text("\n\n".join(results), encoding="utf-8")
     print(f"\nDone. Text written to {out_path.resolve()}")

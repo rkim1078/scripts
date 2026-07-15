@@ -15,7 +15,7 @@ Two small scripts for turning scanned device screenshots into structured CSV dat
 ### Python packages
 
 ```bash
-pip install pytesseract pillow
+pip install pytesseract pillow tqdm
 ```
 
 ### Tesseract OCR (system install)
